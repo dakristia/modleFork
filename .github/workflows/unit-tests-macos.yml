@@ -59,7 +59,8 @@ jobs:
           echo 'conan==${{ matrix.conan-ver }}' >> requirements.txt
           echo 'cmake==${{ matrix.cmake-ver }}' >> requirements.txt
           echo scipy >> requirements.txt
-          printf 'Package: foo\nImports: wCorr' >> DESCRIPTION
+          printf 'Package: foo\nVersion: 0.0.1\nLicense: "MIT"\nDescription: "foo"\n"' >> DESCRIPTION
+          printf 'Title: "foo"\nAuthor: "me"\nMaintainer: "me"\nImports: wCorr' >> DESCRIPTION
 
       - uses: actions/setup-python@v3
         with:
