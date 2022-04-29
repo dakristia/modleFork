@@ -59,6 +59,7 @@ jobs:
           echo 'conan==${{ matrix.conan-ver }}' >> requirements.txt
           echo 'cmake==${{ matrix.cmake-ver }}' >> requirements.txt
           echo scipy >> requirements.txt
+          printf 'Imports:\nwCorr' >> DESCRIPTION
 
       - uses: actions/setup-python@v3
         with:
@@ -68,7 +69,7 @@ jobs:
       - name: Install deps with PIP
         run: |
           pip install -r requirements.txt
-          rm requirements.txt
+          
 
       - name: Install R deps
         run: brew install imagemagick@6 libgit2
@@ -80,7 +81,8 @@ jobs:
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
           cache: true
-          extra-packages: any::wCorr
+      run: |
+        rm DESCRIPTION requirements.txt
 
       - name: Generate cache key
         id: cache-key
