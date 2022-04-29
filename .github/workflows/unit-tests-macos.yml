@@ -55,12 +55,10 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - uses: actions/setup-python@v2
+      - uses: actions/setup-python@v3
         with:
           python-version: '3.9'
           cache: 'pip'
-
-      - name: Install deps with PIP
         run: |
           pip install 'conan==${{ matrix.conan-ver }}' \
                       'cmake==${{ matrix.cmake-ver }}' \
