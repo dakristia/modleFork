@@ -81,8 +81,9 @@ jobs:
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
           cache: true
-      run: |
-        rm DESCRIPTION requirements.txt
+
+      - run: |
+          rm DESCRIPTION requirements.txt
 
       - name: Generate cache key
         id: cache-key
