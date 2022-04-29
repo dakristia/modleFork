@@ -1,0 +1,202 @@
+# Copyright (C) 2022 Roberto Rossini (roberros@uio.no)
+# SPDX-License-Identifier: MIT
+
+name: Unit tests macOS
+
+on:
+  create:
+    tags:
+      - 'v*.*.*'
+
+  push:
+    branches: [ main, devel, ci-devel ]
+    paths:
+      - ".github/workflows/unit-tests-ubuntu.yml"
+      - "cmake/**"
+      - "external/**"
+      - "src/**"
+      - "test/**"
+      - "CMakeLists.txt"
+      - "conanfile.py"
+    tags:
+      - 'v*.*.*'
+
+  pull_request:
+    branches: [ main, devel, ci-devel ]
+    paths:
+      - ".github/workflows/unit-tests-ubuntu.yml"
+      - "cmake/**"
+      - "external/**"
+      - "src/**"
+      - "test/**"
+      - "CMakeLists.txt"
+      - "conanfile.py"
+
+env:
+  CONAN_USER_HOME: "${{ github.workspace }}/conan-cache"
+  CONAN_USER_HOME_SHORT: "${{ github.workspace }}/conan-cache/short"
+  CONAN_V2_MODE: "1"
+  CCACHE_DIR: "${{ github.workspace }}/ccache-cache"
+  CCACHE_COMPRESSLEVEL: "13"
+  CCACHE_MAXSIZE: "500M"
+
+jobs:
+  build-dependencies:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { compiler: gcc,   os: 'macos-11', conan-ver: '1.47.*', cmake-ver: '3.22.*' }
+          - { compiler: clang, os: 'macos-11', conan-ver: '1.47.*', cmake-ver: '3.22.*' }
+          - { compiler: gcc,   os: 'macos-12', conan-ver: '1.47.*', cmake-ver: '3.22.*' }
+          - { compiler: clang, os: 'macos-12', conan-ver: '1.47.*', cmake-ver: '3.22.*' }
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-python@v2
+        with:
+          python-version: '3.9'
+          cache: 'pip'
+
+      - name: Install deps with PIP
+        run: |
+        pip install 'conan==${{ matrix.conan-ver }}' \
+                    'cmake==${{ matrix.cmake-ver }}' \
+                     scipy
+
+      - name: Install R deps
+        run: |
+        brew install imagemagick@6 libgit2
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: '4.2.0'
+
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          cache: true
+          extra-packages: any::wCorr
+
+      - name: Generate cache key
+        id: cache-key
+        run: |
+          os="${{ matrix.os }}"
+          compiler="${{ matrix.compiler }}"
+          hash="${{ hashFiles('conanfile.py', '.github/workflows/unit-tests-macos.yml') }}"
+
+          echo "::set-output name=key::$os-$compiler-$hash"
+
+      - name: Cache Conan packages
+        id: cache-conan
+        uses: actions/cache@v3
+        with:
+          key: conan-${{ steps.cache-key.outputs.key }}
+          path: ${{ env.CONAN_USER_HOME }}
+
+      - name: Configure up Conan
+        if: steps.cache-conan.outputs.cache-hit != 'true'
+        run: |
+          CC="${{ matrix.compiler }}"
+          if [[ $CC == gcc ]]; then
+            CXX=g++
+          else
+            CXX=clang++
+          fi
+          
+          echo "CC=$CC" >> $GITHUB_ENV
+          echo "CXX=$CXX" >> $GITHUB_ENV
+          
+          export CC
+          export CXX
+          
+          conan profile new "$HOME/.conan/profiles/default" --detect --force
+          conan config init
+          conan profile update settings.compiler.cppstd=17 default
+
+          conan remove -f "*" --builds
+          conan remove -f "*" --src
+          conan remove -f "*" --system-reqs
+
+      - name: Install build dependencies
+        if: steps.cache-conan.outputs.cache-hit != 'true'
+        run: |
+          mkdir build
+
+          for build_type in Release Debug; do
+            conan install conanfile.py        \
+               --build outdated               \
+               -s build_type=${build_type}    \
+               -s compiler.libcxx=libstdc++11 \
+               -s compiler.cppstd=17
+          done
+
+  build-project:
+    runs-on: ${{ matrix.os }}
+    needs: build-dependencies
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { compiler: gcc,    os: 'macos-11', build_type: Debug,   developer_mode: ON  }
+          - { compiler: clang,  os: 'macos-11', build_type: Debug,   developer_mode: ON  }
+          - { compiler: gcc,    os: 'macos-12', build_type: Release, developer_mode: OFF }
+          - { compiler: clang,  os: 'macos-12', build_type: Release, developer_mode: OFF }
+          - { compiler: gcc,    os: 'macos-11', build_type: Release, developer_mode: OFF }
+          - { compiler: clang,  os: 'macos-11', build_type: Release, developer_mode: OFF }
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Generate cache key
+        id: cache-key
+        run: |
+          os="${{ matrix.os }}"
+          compiler="${{ matrix.compiler }}"
+          generator="${{ matrix.generator }}"
+          build_type="${{ matrix.build_type }}"
+          hash="${{ hashFiles('conanfile.py', '.github/workflows/unit-tests-macos.yml') }}"
+
+          # This can be used by to always update a cache entry (useful e.g. for ccache)
+          current_date="$(date '+%s')"
+
+          echo "::set-output name=key::$os-$compiler-$hash-$generator-$build_type"
+          echo "::set-output name=restore-key::$os-$compiler-$hash"
+          echo "::set-output name=date::$current_date"
+
+      - name: Cache Conan packages
+        uses: actions/cache@v3
+        with:
+          key: conan-${{ steps.cache-key.outputs.restore-key }}
+          path: ${{ env.CONAN_USER_HOME }}
+
+      - name: Configure project
+        run: |
+          mkdir ${{ github.workspace }}/build
+          cmake -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}          \
+                -DENABLE_DEVELOPER_MODE=${{ matrix.developer_mode }} \
+                -DOPT_ENABLE_CLANG_TIDY=OFF                          \
+                -DOPT_ENABLE_CPPCHECK=OFF                            \
+                -S "${{ github.workspace }}"                         \
+                -B "${{ github.workspace }}/build"
+
+
+      - name: Build project
+        run: cmake --build ${{ github.workspace }}/build -j $(nproc)
+
+      - name: Run unit tests
+        working-directory: ${{ github.workspace }}/build
+        run: |
+          ctest --test-dir .             \
+                --schedule-random        \
+                --output-on-failure      \
+                --no-tests=error         \
+                --timeout 120            \
+                --repeat after-timeout:3 \
+                -j $(nproc)
+
+      - name: Inspect MoDLE version
+        run: |
+          ${{ github.workspace }}/build/src/modle/modle --version
+          ${{ github.workspace }}/build/src/modle_tools/modle_tools --version
