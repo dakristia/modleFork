@@ -11,7 +11,7 @@ on:
   push:
     branches: [ main, devel, ci-devel ]
     paths:
-      - ".github/workflows/unit-tests-ubuntu.yml"
+      - ".github/workflows/unit-tests-macos.yml"
       - "cmake/**"
       - "external/**"
       - "src/**"
@@ -24,7 +24,7 @@ on:
   pull_request:
     branches: [ main, devel, ci-devel ]
     paths:
-      - ".github/workflows/unit-tests-ubuntu.yml"
+      - ".github/workflows/unit-tests-macos.yml"
       - "cmake/**"
       - "external/**"
       - "src/**"
