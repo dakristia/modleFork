@@ -59,8 +59,6 @@ jobs:
           echo 'conan==${{ matrix.conan-ver }}' >> requirements.txt
           echo 'cmake==${{ matrix.cmake-ver }}' >> requirements.txt
           echo scipy >> requirements.txt
-          printf 'Package: foo\nVersion: 0.0.1\nLicense: "MIT"\nDescription: "foo"\n"' >> DESCRIPTION
-          printf 'Title: "foo"\nAuthor: "me"\nMaintainer: "me"\nImports: wCorr' >> DESCRIPTION
 
       - uses: actions/setup-python@v3
         with:
@@ -70,21 +68,6 @@ jobs:
       - name: Install deps with PIP
         run: |
           pip install -r requirements.txt
-          
-
-      - name: Install R deps
-        run: brew install imagemagick@6 libgit2
-
-      - uses: r-lib/actions/setup-r@v2
-        with:
-          r-version: '4.2.0'
-
-      - uses: r-lib/actions/setup-r-dependencies@v2
-        with:
-          cache: true
-
-      - run: |
-          rm DESCRIPTION requirements.txt
 
       - name: Generate cache key
         id: cache-key
@@ -111,13 +94,13 @@ jobs:
           else
             CXX=clang++
           fi
-          
+
           echo "CC=$CC" >> $GITHUB_ENV
           echo "CXX=$CXX" >> $GITHUB_ENV
-          
+
           export CC
           export CXX
-          
+
           conan profile new "$HOME/.conan/profiles/default" --detect --force
           conan config init
           conan profile update settings.compiler.cppstd=17 default
@@ -145,8 +128,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { compiler: gcc,    os: 'macos-11', build_type: Debug,   developer_mode: ON  }
-          - { compiler: clang,  os: 'macos-11', build_type: Debug,   developer_mode: ON  }
+          - { compiler: gcc,    os: 'macos-11', build_type: Debug,   developer_mode: ON }
+          - { compiler: clang,  os: 'macos-11', build_type: Debug,   developer_mode: ON }
           - { compiler: gcc,    os: 'macos-12', build_type: Release, developer_mode: OFF }
           - { compiler: clang,  os: 'macos-12', build_type: Release, developer_mode: OFF }
           - { compiler: gcc,    os: 'macos-11', build_type: Release, developer_mode: OFF }
@@ -171,6 +154,21 @@ jobs:
           echo "::set-output name=restore-key::$os-$compiler-$hash"
           echo "::set-output name=date::$current_date"
 
+      - run: |
+          echo 'conan==${{ matrix.conan-ver }}' >> requirements.txt
+          echo 'cmake==${{ matrix.cmake-ver }}' >> requirements.txt
+          echo scipy >> requirements.txt
+
+      - uses: actions/setup-python@v3
+        with:
+          python-version: '3.9'
+          cache: 'pip'
+
+      - name: Install deps with PIP
+        run: |
+          pip install -r requirements.txt
+          rm requirements.txt
+
       - name: Cache Conan packages
         uses: actions/cache@v3
         with:
@@ -187,9 +185,23 @@ jobs:
                 -S "${{ github.workspace }}"                         \
                 -B "${{ github.workspace }}/build"
 
-
       - name: Build project
         run: cmake --build ${{ github.workspace }}/build -j $(nproc)
+
+      - run: |
+          printf 'Package: foo\nVersion: 0.0.1\nLicense: MIT\nDescription: foo\n"' >> DESCRIPTION
+          printf 'Title: foo\nAuthor: me\nMaintainer: me\nImports: wCorr' >> DESCRIPTION
+
+      - name: Install setup-r action dependencies
+        run: brew install imagemagick@6 libgit2
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: '4.2.0'
+
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          cache: true
 
       - name: Run unit tests
         working-directory: ${{ github.workspace }}/build
